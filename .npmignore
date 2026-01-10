@@ -1,0 +1,29 @@
+# Source files (we publish dist/ only)
+src/
+tsconfig.json
+*.test.ts
+
+# Development files
+node_modules/
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Test files and data
+test_data/
+test_connection.sh
+test_clean.sh
+TEST_GUIDE.md
+
+# Logs and temp files
+*.log
+/tmp/
+*.tmp
+*.swp
+
+# Documentation (keep README.md and LICENSE)
+docs/
+
+# Build artifacts (we want dist/ though)
+*.tsbuildinfo

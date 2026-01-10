@@ -8,14 +8,14 @@ import { ReceiveCommand } from './commands/receive.js';
 
 const cli = meow(`
   Usage
-    $ hyperstream                             # Interactive shell mode
-    $ hyperstream send <path>                 # Direct send
-    $ hyperstream receive <key> [--output]    # Direct receive
+    $ ezshare                             # Interactive shell mode
+    $ ezshare send <path>                 # Direct send
+    $ ezshare receive <key> [--output]    # Direct receive
 
   Examples
-    $ hyperstream                             # Launch interactive shell
-    $ hyperstream send ./myfile.zip           # Quick send
-    $ hyperstream receive abc123... -o ./downloads
+    $ ezshare                             # Launch interactive shell
+    $ ezshare send ./myfile.zip           # Quick send
+    $ ezshare receive abc123... -o ./downloads
 
   Options
     --output, -o  Output directory for received files (default: current directory)
@@ -43,7 +43,7 @@ if (!command) {
 else if (command === 'send') {
   if (!arg) {
     console.error('Error: Please specify a file or directory to send');
-    console.log('Usage: hyperstream send <path>');
+    console.log('Usage: ezshare send <path>');
     process.exit(1);
   }
 
@@ -53,7 +53,7 @@ else if (command === 'send') {
 else if (command === 'receive') {
   if (!arg) {
     console.error('Error: Please specify a share key');
-    console.log('Usage: hyperstream receive <key> [--output <dir>]');
+    console.log('Usage: ezshare receive <key> [--output <dir>]');
     process.exit(1);
   }
 

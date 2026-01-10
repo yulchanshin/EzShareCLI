@@ -14,6 +14,7 @@ npx tsx src/cli.tsx
 2. Press Enter
 3. Use arrow keys to select "📤 Send file or folder"
 4. Press Enter
+
 5. Navigate with arrow keys to find `test-data` folder
 6. Press Enter to enter the folder
 7. Select `message.txt` with Enter

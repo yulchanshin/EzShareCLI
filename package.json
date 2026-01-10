@@ -1,19 +1,43 @@
 {
-  "name": "hyperstream",
+  "name": "ezshare",
   "version": "1.0.0",
-  "description": "Decentralized P2P file transfer CLI using Hyperswarm DHT",
+  "description": "Secure P2P file transfer CLI with end-to-end encryption - No servers, no signups, just share",
   "type": "module",
   "bin": {
-    "hyperstream": "./bin/hyperstream.js"
+    "ezshare": "./bin/ezshare.js"
   },
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/cli.tsx",
-    "test": "tsx --test src/**/*.test.ts"
+    "test": "tsx --test src/**/*.test.ts",
+    "prepublishOnly": "npm run build"
   },
-  "keywords": ["p2p", "file-transfer", "hyperswarm", "cli", "decentralized"],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "p2p",
+    "file-transfer",
+    "file-sharing",
+    "hyperswarm",
+    "cli",
+    "decentralized",
+    "encrypted",
+    "dht",
+    "peer-to-peer",
+    "secure-transfer",
+    "no-server"
+  ],
+  "author": "Blake",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yulchanshin/ezsharecli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yulchanshin/ezsharecli/issues"
+  },
+  "homepage": "https://github.com/yulchanshin/ezsharecli#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
     "@inkjs/ui": "^2.0.0",
     "hyperswarm": "^4.16.0",
