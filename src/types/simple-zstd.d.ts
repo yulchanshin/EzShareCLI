@@ -58,8 +58,3 @@ declare module 'simple-zstd' {
     decompressBuffer(buffer: Buffer): Promise<Buffer>;
   }
 }
-
-// Type declarations for the ES module (.mjs) entry point
-declare module 'simple-zstd/dist/index.mjs' {
-  export * from 'simple-zstd';
-}

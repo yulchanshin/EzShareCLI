@@ -17,7 +17,16 @@
 import { Transform, TransformCallback, Duplex } from 'node:stream';
 import { extname } from 'node:path';
 import { execSync } from 'node:child_process';
-import { compress, decompress } from 'simple-zstd/dist/index.mjs';
+
+// Dynamic import to handle CommonJS module from ES module context
+let zstdModule: typeof import('simple-zstd') | null = null;
+
+async function getZstdModule() {
+  if (!zstdModule) {
+    zstdModule = await import('simple-zstd');
+  }
+  return zstdModule;
+}
 
 // Protocol flags
 const FLAG_RAW = 0x00;
@@ -168,6 +177,7 @@ export async function createCompressStream(
   }
 
   // Get zstd compression stream
+  const { compress } = await getZstdModule();
   const zstdStream = await compress(COMPRESSION_LEVEL);
 
   // Track state
@@ -306,7 +316,8 @@ export async function createDecompressStream(): Promise<Transform> {
           }
 
           // Synchronously set up - decompress() returns Promise but we handle async carefully
-          decompress()
+          getZstdModule()
+            .then(({ decompress }) => decompress())
             .then((stream: Duplex) => {
               if (destroyed) {
                 stream.destroy();
