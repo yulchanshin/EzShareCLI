@@ -4,7 +4,7 @@
   "description": "Secure P2P file transfer CLI with end-to-end encryption - No servers, no signups, just share",
   "type": "module",
   "bin": {
-    "ezshare": "./bin/ezshare.js"
+    "ezshare": "bin/ezshare.js"
   },
   "scripts": {
     "build": "tsc",

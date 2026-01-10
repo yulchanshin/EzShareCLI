@@ -2,6 +2,7 @@
 src/
 tsconfig.json
 *.test.ts
+*.test.js
 
 # Development files
 node_modules/
@@ -9,9 +10,11 @@ node_modules/
 .gitignore
 .vscode/
 .idea/
+.claude/
 
 # Test files and data
 test_data/
+test-data/
 test_connection.sh
 test_clean.sh
 TEST_GUIDE.md
@@ -21,9 +24,13 @@ TEST_GUIDE.md
 /tmp/
 *.tmp
 *.swp
+npm-debug.log*
 
 # Documentation (keep README.md and LICENSE)
 docs/
 
 # Build artifacts (we want dist/ though)
 *.tsbuildinfo
+
+# Debug logs
+debug.log
