@@ -39,7 +39,7 @@ choco install zstd
 ### Install Globally
 
 ```bash
-npm install -g ezshare
+npm install -g ezshare-cli
 ```
 
 Now you can use `ezshare` from anywhere!
@@ -47,7 +47,7 @@ Now you can use `ezshare` from anywhere!
 ### Or Use with npx (no install)
 
 ```bash
-npx ezshare
+npx ezshare-cli
 ```
 
 ## 🚀 Quick Start

@@ -1,5 +1,5 @@
 {
-  "name": "ezshare",
+  "name": "ezshare-cli",
   "version": "1.0.0",
   "description": "Secure P2P file transfer CLI with end-to-end encryption - No servers, no signups, just share",
   "type": "module",
