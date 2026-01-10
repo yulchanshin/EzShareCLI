@@ -8,7 +8,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "dev": "tsx src/cli.tsx"
+    "dev": "tsx src/cli.tsx",
+    "test": "tsx --test src/**/*.test.ts"
   },
   "keywords": ["p2p", "file-transfer", "hyperswarm", "cli", "decentralized"],
   "author": "",
