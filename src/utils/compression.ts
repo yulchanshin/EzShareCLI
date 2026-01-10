@@ -17,7 +17,7 @@
 import { Transform, TransformCallback, Duplex } from 'node:stream';
 import { extname } from 'node:path';
 import { execSync } from 'node:child_process';
-import { compress, decompress } from 'simple-zstd';
+import { compress, decompress } from 'simple-zstd/dist/index.mjs';
 
 // Protocol flags
 const FLAG_RAW = 0x00;
