@@ -42,11 +42,25 @@ export function ReceiveCommand({ shareKey, outputPath = process.cwd(), onComplet
       // Derive encryption key from topic
       const encryptionKey = deriveKey(topic);
 
-      // Create receiver swarm
-      const { swarm, waitForPeer } = await createReceiverSwarm(topic);
+      // Create receiver swarm and get connection promise
+      const { swarm, connectionPromise } = await createReceiverSwarm(topic);
 
-      // Wait for peer connection
-      const socket = await waitForPeer();
+      // Wait for peer connection (listener already registered)
+      const socket = await connectionPromise;
+      console.log('[Receiver] Connected to sender');
+
+      // Add socket error handler
+      socket.on('error', (err) => {
+        console.error('[Receiver] Socket error:', err);
+      });
+
+      socket.on('end', () => {
+        console.log('[Receiver] Socket end event received');
+      });
+
+      socket.on('close', () => {
+        console.log('[Receiver] Socket closed');
+      });
 
       // Read metadata first (JSON header followed by newline)
       const metadataBuffer: Buffer[] = [];
@@ -63,17 +77,25 @@ export function ReceiveCommand({ shareKey, outputPath = process.cwd(), onComplet
 
             if (newlineIndex !== -1) {
               // Found metadata
-              const metadataJson = combined.slice(0, newlineIndex).toString();
-              transferMetadata = JSON.parse(metadataJson);
-              setMetadata(transferMetadata);
+              try {
+                const metadataJson = combined.slice(0, newlineIndex).toString();
+                console.log('[Receiver] Received metadata:', metadataJson);
+                transferMetadata = JSON.parse(metadataJson);
+                setMetadata(transferMetadata);
 
-              // Push remaining data after newline
-              const remainingData = combined.slice(newlineIndex + 1);
-              if (remainingData.length > 0) {
-                this.push(remainingData);
+                // Push remaining data after newline
+                const remainingData = combined.slice(newlineIndex + 1);
+                console.log(`[Receiver] Metadata extracted, ${remainingData.length} bytes of data after newline`);
+                if (remainingData.length > 0) {
+                  this.push(remainingData);
+                }
+
+                metadataReceived = true;
+              } catch (err) {
+                console.error('[Receiver] Failed to parse metadata:', err);
+                callback(err as Error);
+                return;
               }
-
-              metadataReceived = true;
             }
             callback();
           } else {
@@ -98,6 +120,7 @@ export function ReceiveCommand({ shareKey, outputPath = process.cwd(), onComplet
 
       // Start receiving
       setState('receiving');
+      console.log('[Receiver] Starting receive pipeline');
 
       // Build the pipeline: Socket → Metadata Extractor → Progress → Decrypt → Decompress → Tar Extract
       const decryptStream = createDecryptStream(encryptionKey);
@@ -113,8 +136,14 @@ export function ReceiveCommand({ shareKey, outputPath = process.cwd(), onComplet
         extractStream
       );
 
+      console.log('[Receiver] Pipeline completed successfully');
+
       // Transfer complete
       setState('done');
+
+      // Receiver cleanup - small delay to ensure socket is fully closed
+      await new Promise(resolve => setTimeout(resolve, 100));
+      console.log('[Receiver] Cleaning up receiver swarm');
       await cleanupSwarm(swarm);
 
       if (onComplete) {

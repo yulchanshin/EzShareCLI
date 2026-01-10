@@ -18,10 +18,10 @@ describe('Network Utility', () => {
 
     it('should create receiver swarm successfully', async () => {
       const { topic } = generateTopicKey();
-      const { swarm, waitForPeer } = await createReceiverSwarm(topic);
+      const { swarm, connectionPromise } = await createReceiverSwarm(topic);
 
       assert.ok(swarm, 'Swarm should be created');
-      assert.strictEqual(typeof waitForPeer, 'function', 'waitForPeer should be a function');
+      assert.ok(connectionPromise instanceof Promise, 'connectionPromise should be a Promise');
 
       await cleanupSwarm(swarm);
     });
@@ -47,7 +47,7 @@ describe('Network Utility', () => {
       ]);
 
       const receiverPeerPromise = Promise.race([
-        receiver.waitForPeer(),
+        receiver.connectionPromise,
         new Promise<null>((_, reject) =>
           setTimeout(() => reject(new Error('Receiver connection timeout')), timeout)
         )
@@ -83,7 +83,7 @@ describe('Network Utility', () => {
       // Wait for connections
       const [senderSocket, receiverSocket] = await Promise.all([
         sender.waitForPeer(),
-        receiver.waitForPeer()
+        receiver.connectionPromise
       ]);
 
       // Set up data receiver
@@ -117,7 +117,7 @@ describe('Network Utility', () => {
       // Wait for connections
       const [senderSocket, receiverSocket] = await Promise.all([
         sender.waitForPeer(),
-        receiver.waitForPeer()
+        receiver.connectionPromise
       ]);
 
       // Set up bidirectional communication
@@ -174,7 +174,7 @@ describe('Network Utility', () => {
 
       const [senderSocket, receiverSocket] = await Promise.all([
         sender.waitForPeer(),
-        receiver.waitForPeer()
+        receiver.connectionPromise
       ]);
 
       // Cleanup sender swarm
@@ -211,8 +211,8 @@ describe('Network Utility', () => {
 
       // Wait for receivers to connect
       await Promise.all([
-        receiver1.waitForPeer(),
-        receiver2.waitForPeer()
+        receiver1.connectionPromise,
+        receiver2.connectionPromise
       ]);
 
       // Wait a bit for sender to register both connections

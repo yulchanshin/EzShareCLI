@@ -1,0 +1,2 @@
+This is another test file.
+Multiple files in a directory.

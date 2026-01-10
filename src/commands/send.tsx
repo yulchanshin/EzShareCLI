@@ -50,10 +50,25 @@ export function SendCommand({ path, onComplete, onError }: SendCommandProps) {
       // Wait for peer connection
       const socket = await waitForPeer();
 
+      // Register socket close listener BEFORE pipeline starts
+      // This ensures we don't miss the close event
+      const socketClosed = new Promise<void>((resolve) => {
+        socket.once('close', () => {
+          console.log('[Sender] Socket closed');
+          resolve();
+        });
+      });
+
+      // Add socket error handler
+      socket.on('error', (err) => {
+        console.error('[Sender] Socket error:', err);
+      });
+
       // Peer connected! Start sending
       setState('sending');
+      console.log('[Sender] Starting transfer pipeline');
 
-      // Send metadata first (JSON header)
+      // Create metadata prepend stream
       const metadataJson = JSON.stringify({
         totalSize: transferMetadata.totalSize,
         fileCount: transferMetadata.fileCount,
@@ -61,7 +76,17 @@ export function SendCommand({ path, onComplete, onError }: SendCommandProps) {
         compressed: shouldCompress(path),
       }) + '\n';
 
-      socket.write(metadataJson);
+      let metadataSent = false;
+      const metadataPrepender = new Transform({
+        transform(chunk, encoding, callback) {
+          if (!metadataSent) {
+            // Send metadata as first chunk
+            this.push(Buffer.from(metadataJson));
+            metadataSent = true;
+          }
+          callback(null, chunk);
+        },
+      });
 
       // Create progress tracker
       let transferred = 0;
@@ -74,7 +99,8 @@ export function SendCommand({ path, onComplete, onError }: SendCommandProps) {
         },
       });
 
-      // Build the pipeline: Tar → Compress → Encrypt → Progress → Socket
+      // Build the pipeline: Tar → Compress → Encrypt → Metadata → Progress → Socket
+      // Note: Metadata is added AFTER encryption so it's sent in plaintext
       const packStream = createPackStream(path);
       const compressStream = await createCompressStream(shouldCompress(path));
       const encryptStream = createEncryptStream(encryptionKey);
@@ -83,9 +109,18 @@ export function SendCommand({ path, onComplete, onError }: SendCommandProps) {
         packStream,
         compressStream,
         encryptStream,
+        metadataPrepender,
         progressTracker,
         socket
       );
+
+      console.log('[Sender] Pipeline completed, waiting for socket to close');
+
+      // Wait for socket to fully close before cleaning up
+      // This ensures the receiver has finished and closed their end
+      await socketClosed;
+
+      console.log('[Sender] Socket closed, cleaning up swarm');
 
       // Transfer complete
       setState('done');

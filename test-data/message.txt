@@ -1,0 +1,3 @@
+Hello from HyperStream!
+This is a P2P encrypted file transfer.
+Testing the interactive TUI shell.
