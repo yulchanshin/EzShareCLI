@@ -1,7 +1,7 @@
 import { Readable, Writable } from 'node:stream';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { readdir, stat, mkdir } from 'node:fs/promises';
-import { join, dirname, relative } from 'node:path';
+import { join, dirname, relative, basename, isAbsolute, sep } from 'node:path';
 import tarStream from 'tar-stream';
 
 // Use the Header type from our declaration file
@@ -82,8 +82,8 @@ export function createPackStream(sourcePath: string): Readable {
       const stats = await stat(sourcePath);
 
       if (!stats.isDirectory()) {
-        // Single file - add it directly
-        const relativeName = sourcePath.split('/').pop() || 'file';
+        // Single file - add it directly with just the filename (no path)
+        const relativeName = basename(sourcePath);
         const fileStream = createReadStream(sourcePath);
 
         const entry = pack.entry({
@@ -112,6 +112,8 @@ export function createPackStream(sourcePath: string): Readable {
         for (const entry of entries) {
           const fullPath = join(currentPath, entry.name);
           const relativePath = relative(basePath, fullPath);
+          // Normalize to forward slashes for tar format (cross-platform compatibility)
+          const tarPath = relativePath.split(sep).join('/');
 
           if (entry.isDirectory()) {
             // Add directory entry
@@ -119,7 +121,7 @@ export function createPackStream(sourcePath: string): Readable {
 
             await new Promise<void>((resolve, reject) => {
               pack.entry({
-                name: relativePath + '/',
+                name: tarPath + '/',
                 type: 'directory',
                 mode: dirStats.mode,
                 mtime: dirStats.mtime,
@@ -137,7 +139,7 @@ export function createPackStream(sourcePath: string): Readable {
             const fileStream = createReadStream(fullPath);
 
             const tarEntry = pack.entry({
-              name: relativePath,
+              name: tarPath,
               size: fileStats.size,
               mode: fileStats.mode,
               mtime: fileStats.mtime,
@@ -173,7 +175,19 @@ export function createExtractStream(destPath: string): Writable {
   const extract = tarStream.extract();
 
   extract.on('entry', (header: Header, stream: Readable, next: (err?: Error) => void) => {
-    const outputPath = join(destPath, header.name);
+    // Sanitize the entry name to prevent path traversal and absolute paths
+    let entryName = header.name;
+
+    // Remove any absolute path prefix (Windows or Unix)
+    // Strip drive letters like C:, D:, etc.
+    entryName = entryName.replace(/^[a-zA-Z]:/, '');
+    // Strip leading slashes
+    entryName = entryName.replace(/^[/\\]+/, '');
+
+    // Convert tar's forward slashes to platform-specific separators
+    const normalizedName = entryName.split('/').join(sep);
+
+    const outputPath = join(destPath, normalizedName);
 
     // Ensure parent directory exists
     (async () => {
