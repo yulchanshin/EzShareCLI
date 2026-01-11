@@ -23,18 +23,8 @@ Share files and folders directly between peers using decentralized Hyperswarm DH
 ### Prerequisites
 
 - **Node.js 18+** (recommended: Node 20+)
-- **Zstandard** (`zstd`) - required for compression
 
-```bash
-# Ubuntu/Debian
-sudo apt install zstd
-
-# macOS
-brew install zstd
-
-# Windows (chocolatey)
-choco install zstd
-```
+That's it! Zstandard compression is bundled - no system dependencies needed.
 
 ### Install Globally
 
@@ -182,7 +172,7 @@ ezshare receive <key> --output ~/Downloads
 | Runtime | Node.js 18+ with TypeScript ES Modules |
 | P2P Network | [Hyperswarm](https://github.com/holepunchto/hyperswarm) (Kademlia DHT + NAT traversal) |
 | Encryption | AES-256-GCM (Node.js crypto) |
-| Compression | [Zstandard](https://github.com/facebook/zstd) via simple-zstd |
+| Compression | [Zstandard](https://github.com/facebook/zstd) via @skhaz/zstd (bundled binaries) |
 | Archiving | tar-stream (streaming tar) |
 | TUI | [Ink](https://github.com/vadimdemedes/ink) (React for CLI) |
 | CLI Parser | meow |
@@ -227,11 +217,6 @@ ezsharecli/
 - Verify the share key is correct (copy-paste to avoid typos)
 - Ensure sender is still running and waiting
 - Both peers need internet connectivity for DHT bootstrap
-
-### Compression Issues
-
-**"zstd: command not found"**
-- Install zstd using your package manager (see Installation section)
 
 ### Performance Tips
 
