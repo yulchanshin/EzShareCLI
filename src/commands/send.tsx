@@ -102,7 +102,8 @@ export function SendCommand({ path, onComplete, onError }: SendCommandProps) {
             this.push(Buffer.from(metadataJson));
             metadataSent = true;
           }
-          callback(null, chunk);
+          this.push(chunk);
+          callback();
         },
       });
 

@@ -14,19 +14,9 @@
  * to automatically detect and handle both cases.
  */
 
-import { Transform, TransformCallback, Duplex } from 'node:stream';
+import { Transform, TransformCallback } from 'node:stream';
 import { extname } from 'node:path';
-import { execSync } from 'node:child_process';
-
-// Dynamic import to handle CommonJS module from ES module context
-let zstdModule: typeof import('simple-zstd') | null = null;
-
-async function getZstdModule() {
-  if (!zstdModule) {
-    zstdModule = await import('simple-zstd');
-  }
-  return zstdModule;
-}
+import { compressStream, decompressStream } from '@skhaz/zstd';
 
 // Protocol flags
 const FLAG_RAW = 0x00;
@@ -96,15 +86,10 @@ const COMPRESSED_EXTENSIONS = new Set([
 ]);
 
 /**
- * Check if the system has zstd installed
+ * Check if zstd is available (always true with bundled @mongodb-js/zstd)
  */
 export function isZstdAvailable(): boolean {
-  try {
-    execSync('zstd --version', { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
+  return true; // Bundled native module, always available
 }
 
 /**
@@ -166,47 +151,14 @@ export async function createCompressStream(
     return createFlagPrepender(FLAG_RAW);
   }
 
-  // Check zstd availability
-  if (!isZstdAvailable()) {
-    throw new Error(
-      'zstd is not installed. Please install zstd:\n' +
-        '  Ubuntu/Debian: sudo apt install zstd\n' +
-        '  macOS: brew install zstd\n' +
-        '  Windows: choco install zstd'
-    );
-  }
+  // No need to check zstd availability - bundled with @skhaz/zstd
 
-  // Get zstd compression stream
-  const { compress } = await getZstdModule();
-  const zstdStream = await compress(COMPRESSION_LEVEL);
+  // Get zstd compression stream from bundled module
+  const zstdStream = compressStream({ level: COMPRESSION_LEVEL });
 
-  // Track state
+  // Prepend compression flag to the stream
   let flagSent = false;
-  const pendingData: Buffer[] = [];
-  let zstdFinished = false;
-  let flushCallback: TransformCallback | null = null;
-
-  // Collect compressed output from zstd
-  zstdStream.on('data', (chunk: Buffer) => {
-    pendingData.push(chunk);
-  });
-
-  zstdStream.on('end', () => {
-    zstdFinished = true;
-    if (flushCallback) {
-      const cb = flushCallback;
-      flushCallback = null;
-      cb();
-    }
-  });
-
-  zstdStream.on('error', (err: Error) => {
-    if (flushCallback) {
-      const cb = flushCallback;
-      flushCallback = null;
-      cb(err);
-    }
-  });
+  let wrapperEnded = false;
 
   const wrapper = new Transform({
     transform(
@@ -214,51 +166,41 @@ export async function createCompressStream(
       _encoding: BufferEncoding,
       callback: TransformCallback
     ) {
-      // Write input to zstd
-      zstdStream.write(chunk, (err: Error | null | undefined) => {
-        if (err) {
-          callback(err);
-          return;
-        }
-
-        // Push any pending compressed data
-        while (pendingData.length > 0) {
-          const data = pendingData.shift()!;
-          if (!flagSent) {
-            this.push(Buffer.from([FLAG_COMPRESSED]));
-            flagSent = true;
-          }
-          this.push(data);
-        }
-
+      // Write to zstd compressor
+      const written = zstdStream.write(chunk);
+      if (!written) {
+        zstdStream.once('drain', callback);
+      } else {
         callback();
-      });
+      }
     },
-
     flush(callback: TransformCallback) {
-      // End the zstd stream and wait for all data
-      const pushRemaining = () => {
-        while (pendingData.length > 0) {
-          const data = pendingData.shift()!;
+      // End zstd stream and wait for it to finish
+      zstdStream.once('end', () => {
+        if (!wrapperEnded) {
+          wrapperEnded = true;
+          // Handle edge case: empty input
           if (!flagSent) {
-            this.push(Buffer.from([FLAG_COMPRESSED]));
-            flagSent = true;
+            wrapper.push(Buffer.from([FLAG_COMPRESSED]));
           }
-          this.push(data);
+          callback();
         }
-
-        // Handle edge case: empty input
-        if (!flagSent) {
-          this.push(Buffer.from([FLAG_COMPRESSED]));
-        }
-
-        callback();
-      };
-
-      // Wait for 'end' event which fires after all 'data' events
-      zstdStream.once('end', pushRemaining);
+      });
       zstdStream.end();
     },
+  });
+
+  // Collect compressed output from zstd and prepend flag
+  zstdStream.on('data', (chunk: Buffer) => {
+    if (!flagSent) {
+      wrapper.push(Buffer.from([FLAG_COMPRESSED]));
+      flagSent = true;
+    }
+    wrapper.push(chunk);
+  });
+
+  zstdStream.on('error', (err: Error) => {
+    wrapper.destroy(err);
   });
 
   return wrapper;
@@ -275,10 +217,9 @@ export async function createCompressStream(
  */
 export async function createDecompressStream(): Promise<Transform> {
   let flag: number | null = null;
-  let zstdStream: Duplex | null = null;
+  let zstdStream: Transform | null = null;
   let buffer = Buffer.alloc(0);
   let destroyed = false;
-  const pendingOutput: Buffer[] = [];
 
   const wrapper = new Transform({
     transform(
@@ -309,69 +250,52 @@ export async function createDecompressStream(): Promise<Transform> {
 
         // Initialize zstd if needed
         if (flag === FLAG_COMPRESSED) {
-          if (!isZstdAvailable()) {
-            return callback(
-              new Error('zstd is not installed but data is compressed')
-            );
+          // Set up decompression stream from bundled module
+          const stream = decompressStream();
+
+          if (destroyed) {
+            stream.destroy();
+            return callback();
           }
 
-          // Synchronously set up - decompress() returns Promise but we handle async carefully
-          getZstdModule()
-            .then(({ decompress }) => decompress())
-            .then((stream: Duplex) => {
-              if (destroyed) {
-                stream.destroy();
-                return callback();
-              }
+          zstdStream = stream;
 
-              zstdStream = stream;
+          // Pipe decompressed output to wrapper
+          stream.on('data', (data: Buffer) => {
+            wrapper.push(data);
+          });
 
-              // Collect decompressed output
-              stream.on('data', (data: Buffer) => {
-                pendingOutput.push(data);
-              });
+          stream.on('error', (err: Error) => {
+            wrapper.destroy(err);
+          });
 
-              stream.on('error', (err: Error) => {
-                wrapper.destroy(err);
-              });
+          // Write any buffered compressed data
+          if (buffer.length > 0) {
+            const written = stream.write(buffer);
+            buffer = Buffer.alloc(0);
+            if (!written) {
+              stream.once('drain', callback);
+            } else {
+              callback();
+            }
+          } else {
+            callback();
+          }
 
-              // Write any buffered compressed data
-              if (buffer.length > 0) {
-                stream.write(buffer, (err: Error | null | undefined) => {
-                  buffer = Buffer.alloc(0);
-                  // Push any output that arrived
-                  while (pendingOutput.length > 0) {
-                    this.push(pendingOutput.shift());
-                  }
-                  callback(err || undefined);
-                });
-              } else {
-                callback();
-              }
-            })
-            .catch((err: Error) => {
-              callback(err);
-            });
-
-          return; // Wait for async initialization
+          return; // Async stream initialization
         }
       }
 
       // Process buffered data
       if (buffer.length > 0) {
         if (flag === FLAG_COMPRESSED && zstdStream) {
-          zstdStream.write(buffer, (err: Error | null | undefined) => {
-            buffer = Buffer.alloc(0);
-            // Push any output that arrived
-            while (pendingOutput.length > 0) {
-              this.push(pendingOutput.shift());
-            }
-            if (err && !destroyed) {
-              callback(err);
-            } else {
-              callback();
-            }
-          });
+          const written = zstdStream.write(buffer);
+          buffer = Buffer.alloc(0);
+          if (!written) {
+            zstdStream.once('drain', callback);
+          } else {
+            callback();
+          }
         } else if (flag === FLAG_RAW) {
           this.push(buffer);
           buffer = Buffer.alloc(0);
@@ -380,24 +304,13 @@ export async function createDecompressStream(): Promise<Transform> {
           callback();
         }
       } else {
-        // Push any pending output
-        while (pendingOutput.length > 0) {
-          this.push(pendingOutput.shift());
-        }
         callback();
       }
     },
 
     flush(callback: TransformCallback) {
       if (zstdStream) {
-        // Wait for 'end' event which fires after all 'data' events
-        zstdStream.once('end', () => {
-          // Push any remaining output
-          while (pendingOutput.length > 0) {
-            this.push(pendingOutput.shift());
-          }
-          callback();
-        });
+        zstdStream.once('end', callback);
         zstdStream.end();
       } else {
         callback();
