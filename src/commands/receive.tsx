@@ -3,10 +3,23 @@ import { Box, Text } from 'ink';
 import { Spinner, ProgressBar } from '@inkjs/ui';
 import { pipeline } from 'node:stream/promises';
 import { Transform, PassThrough } from 'node:stream';
+import { appendFileSync } from 'node:fs';
 import { parseTopicKey, deriveKey, createDecryptStream } from '../utils/crypto.js';
 import { createDecompressStream } from '../utils/compression.js';
 import { createExtractStream } from '../utils/tar.js';
 import { createReceiverSwarm, cleanupSwarm } from '../utils/network.js';
+
+// Debug logging to file (Ink captures stdout)
+const LOG_FILE = '/tmp/ezshare_debug.log';
+function debugLog(message: string) {
+  const timestamp = new Date().toISOString();
+  const logLine = `[${timestamp}] ${message}\n`;
+  try {
+    appendFileSync(LOG_FILE, logLine);
+  } catch (e) {
+    // Ignore file errors
+  }
+}
 
 interface ReceiveCommandProps {
   shareKey: string;
@@ -47,19 +60,19 @@ export function ReceiveCommand({ shareKey, outputPath = process.cwd(), onComplet
 
       // Wait for peer connection (listener already registered)
       const socket = await connectionPromise;
-      console.log('[Receiver] Connected to sender');
+      debugLog('[Receiver] Connected to sender');
 
       // Add socket error handler
       socket.on('error', (err) => {
-        console.error('[Receiver] Socket error:', err);
+        debugLog('[Receiver] Socket error: ' + err);
       });
 
       socket.on('end', () => {
-        console.log('[Receiver] Socket end event received');
+        debugLog('[Receiver] Socket end event received');
       });
 
       socket.on('close', () => {
-        console.log('[Receiver] Socket closed');
+        debugLog('[Receiver] Socket closed');
       });
 
       // Read metadata first (JSON header followed by newline)
@@ -79,20 +92,20 @@ export function ReceiveCommand({ shareKey, outputPath = process.cwd(), onComplet
               // Found metadata
               try {
                 const metadataJson = combined.slice(0, newlineIndex).toString();
-                console.log('[Receiver] Received metadata:', metadataJson);
+                debugLog('[Receiver] Received metadata: ' + metadataJson);
                 transferMetadata = JSON.parse(metadataJson);
                 setMetadata(transferMetadata);
 
                 // Push remaining data after newline
                 const remainingData = combined.slice(newlineIndex + 1);
-                console.log(`[Receiver] Metadata extracted, ${remainingData.length} bytes of data after newline`);
+                debugLog(`[Receiver] Metadata extracted, ${remainingData.length} bytes of data after newline`);
                 if (remainingData.length > 0) {
                   this.push(remainingData);
                 }
 
                 metadataReceived = true;
               } catch (err) {
-                console.error('[Receiver] Failed to parse metadata:', err);
+                debugLog('[Receiver] Failed to parse metadata: ' + err);
                 callback(err as Error);
                 return;
               }
@@ -120,7 +133,7 @@ export function ReceiveCommand({ shareKey, outputPath = process.cwd(), onComplet
 
       // Start receiving
       setState('receiving');
-      console.log('[Receiver] Starting receive pipeline');
+      debugLog('[Receiver] Starting receive pipeline');
 
       // Build the pipeline: Socket → Metadata Extractor → Progress → Decrypt → Decompress → Tar Extract
       const decryptStream = createDecryptStream(encryptionKey);
@@ -136,14 +149,14 @@ export function ReceiveCommand({ shareKey, outputPath = process.cwd(), onComplet
         extractStream
       );
 
-      console.log('[Receiver] Pipeline completed successfully');
+      debugLog('[Receiver] Pipeline completed successfully');
 
       // Transfer complete
       setState('done');
 
       // Receiver cleanup - small delay to ensure socket is fully closed
       await new Promise(resolve => setTimeout(resolve, 100));
-      console.log('[Receiver] Cleaning up receiver swarm');
+      debugLog('[Receiver] Cleaning up receiver swarm');
       await cleanupSwarm(swarm);
 
       if (onComplete) {

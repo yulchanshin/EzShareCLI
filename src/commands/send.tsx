@@ -3,10 +3,23 @@ import { Box, Text } from 'ink';
 import { Spinner, ProgressBar } from '@inkjs/ui';
 import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
+import { appendFileSync } from 'node:fs';
 import { generateTopicKey, deriveKey, createEncryptStream } from '../utils/crypto.js';
 import { createCompressStream, shouldCompress } from '../utils/compression.js';
 import { createPackStream, getTransferMetadata } from '../utils/tar.js';
 import { createSenderSwarm, cleanupSwarm } from '../utils/network.js';
+
+// Debug logging to file (Ink captures stdout)
+const LOG_FILE = '/tmp/ezshare_debug.log';
+function debugLog(message: string) {
+  const timestamp = new Date().toISOString();
+  const logLine = `[${timestamp}] ${message}\n`;
+  try {
+    appendFileSync(LOG_FILE, logLine);
+  } catch (e) {
+    // Ignore file errors
+  }
+}
 
 interface SendCommandProps {
   path: string;
@@ -45,16 +58,20 @@ export function SendCommand({ path, onComplete, onError }: SendCommandProps) {
 
       // Create sender swarm
       setState('waiting');
+      debugLog('[Sender] About to call createSenderSwarm');
       const { swarm, waitForPeer } = await createSenderSwarm(topic);
+      debugLog('[Sender] createSenderSwarm completed, got waitForPeer function');
 
       // Wait for peer connection
+      debugLog('[Sender] Calling waitForPeer()...');
       const socket = await waitForPeer();
+      debugLog('[Sender] Got socket from waitForPeer');
 
       // Register socket close listener BEFORE pipeline starts
       // This ensures we don't miss the close event
       const socketClosed = new Promise<void>((resolve) => {
         socket.once('close', () => {
-          console.log('[Sender] Socket closed');
+          debugLog('[Sender] Socket closed');
           resolve();
         });
       });
@@ -64,9 +81,10 @@ export function SendCommand({ path, onComplete, onError }: SendCommandProps) {
         console.error('[Sender] Socket error:', err);
       });
 
+      debugLog('[Sender] About to set state to sending');
       // Peer connected! Start sending
       setState('sending');
-      console.log('[Sender] Starting transfer pipeline');
+      debugLog('[Sender] Starting transfer pipeline');
 
       // Create metadata prepend stream
       const metadataJson = JSON.stringify({
@@ -114,13 +132,13 @@ export function SendCommand({ path, onComplete, onError }: SendCommandProps) {
         socket
       );
 
-      console.log('[Sender] Pipeline completed, waiting for socket to close');
+      debugLog('[Sender] Pipeline completed, waiting for socket to close');
 
       // Wait for socket to fully close before cleaning up
       // This ensures the receiver has finished and closed their end
       await socketClosed;
 
-      console.log('[Sender] Socket closed, cleaning up swarm');
+      debugLog('[Sender] Socket closed, cleaning up swarm');
 
       // Transfer complete
       setState('done');
